@@ -11,3 +11,5 @@ macroquad = "0.3.0-alpha.15" #Linear-calculation
 
 # AUDIO
 quad-snd = "0.1.0-alpha.1"
+
+lininterp = "0.1.3"
