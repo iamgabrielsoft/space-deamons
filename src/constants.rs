@@ -27,9 +27,11 @@ pub const SCORE_KILL_ALL: i32 = 1000;
 pub const ENERMY_BULLET_SPEED: f32 = 80f32;
 pub const BULLET_ANIM_TIME_SPAWN: f32 = 0.3f32;
 pub const PLAYER_BULLET_SPEED:f32 = 80f32; 
-
+pub const ENERMY_SHOOT_BURST_TIME: f32 = 0.2f32;
 pub const SCORE_MINI:i32 = 20; 
 pub const SCORE_NORMAL:i32 = 100; 
+pub const ENERMY_SHOOT_TIME: f32 = 2f32;
+pub const ENERMY_MAX_BURST_COUNT: i32 = 5;
 
 //** KEY-MOVEMENT */
 pub const KEY_RIGHT: KeyCode = KeyCode::Right;

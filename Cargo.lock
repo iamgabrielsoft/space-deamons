@@ -184,6 +184,7 @@ dependencies = [
 name = "daemon-attack"
 version = "0.1.0"
 dependencies = [
+ "lininterp",
  "macroquad",
  "quad-snd 0.1.0-alpha.1",
 ]
@@ -314,6 +315,12 @@ dependencies = [
  "cfg-if",
  "winapi",
 ]
+
+[[package]]
+name = "lininterp"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a55db720c79151e28e9cbbfe9248966ac16fb59174ae125cef614b5646517c4"
 
 [[package]]
 name = "macroquad"

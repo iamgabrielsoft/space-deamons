@@ -23,7 +23,7 @@ pub struct Bullet {
 
 impl Bullet {
 
-    pub fn new (pos: Vec2, hurt_type: BulletHurtType, resources: Resources) -> Self {
+    pub fn new (pos: Vec2, hurt_type: BulletHurtType, resources: &Resources) -> Self {
         let (vel, texture) = match hurt_type {
             BulletHurtType::Enermy => (
                 vec2(0f32, -1f32 * PLAYER_BULLET_SPEED),

@@ -74,6 +74,16 @@ impl WaveManager {
         return spawn_count as i32; 
     }
 
+    pub fn reset(&mut self) {
+        let enermies_left = ENERMY_SPAWN_STARTING_COUNT; 
+        self.state = WaveManagerState::Spawning(WaveManagerStateSpawning {
+            spawn_timer: 0f32, 
+            enermies_left
+        }); 
+        self.last_enermydeath_reason = LastEnermyDeathReason::Environment; 
+        self.internal_timer = 0f32; 
+    }
+
     pub fn update(
         &mut self, 
         dt: f32, 

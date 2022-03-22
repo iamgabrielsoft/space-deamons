@@ -9,6 +9,7 @@ use crate::{
     constants::*, 
     resources::{Resources, SoundIdentifier},
     wave::{ WaveManager, LastEnermyDeathReason},
+    bullet:: { Bullet, BulletHurtType }
 };
 
 
@@ -143,6 +144,7 @@ impl Enermy {
     pub fn update(
         &mut self, 
         dt: f32, 
+        bullets: &mut Vec<Bullet>, 
         resources: &Resources, 
         player_pos: &Vec2, 
         game_manager: &mut WaveManager, 
@@ -160,6 +162,7 @@ impl Enermy {
             EnermyState::Shooting(state_data) => Self::update_state_shooting(
                 &mut self.state_shared,
                 dt, 
+                bullets,
                 resources, 
                 state_data, 
                 sound_mixer
@@ -333,10 +336,18 @@ impl Enermy {
 
     pub fn clamp_in_view(pos: &mut Vec2) {
         let x_padding = 4f32;
-        let top_padding = 7f32;
-        let bottom_padding = 60f32;
         if pos.x < x_padding {
             pos.x = x_padding;
+        } else if pos.x > GAME_SIZE_X as f32 - x_padding {
+            pos.x = GAME_SIZE_X as f32 - x_padding
+        }
+        
+        let top_padding = 7f32;
+        let bottom_padding = 60f32;
+        if pos.y < top_padding {
+            pos.y = top_padding;
+        } else if pos.y > GAME_SIZE_Y as f32 - bottom_padding {
+            pos.y = GAME_SIZE_Y as f32 - bottom_padding;
         }
     }
 
@@ -368,16 +379,35 @@ impl Enermy {
         let angle_change_speed = std::f32::consts::PI * state_shared.angle_speed; 
         state_shared.angle += (get_time() as f32 * angle_change_speed).sin() * std::f32::consts::PI * 2f32 * dt;
         let dir = vec2(state_shared.angle.sin(), -state_shared.angle.cos());
-       
+       state_shared.pos.x += dt * ENERMY_SPEED * dt; 
+
+
         
         Self::clamp_in_view(&mut state_shared.pos); 
         state_shared.collision_rect.x = state_shared.pos.x - state_shared.texture.width() * 0.5f32; 
         state_shared.collision_rect.y = state_shared.pos.y;
 
-
-
-        state_shared.pos += dir * ENERMY_SPEED * dt;
         state_data.shoot_timer += dt; 
+        if let Some(charge_timer) = &mut state_shared.charge_timer_optional {
+            *charge_timer -= dt;
+            if *charge_timer <= 0f32  {
+                return Some(EnermyCommand::ChangeState(EnermyState::Homing(
+                    EnermyStateHoming {}, 
+                )))
+            }
+        }
+
+        state_shared.animation_timer += dt; 
+
+        if state_shared.animation_timer > ENERMY_ANIM_TIME_FLAP * 4f32 {
+            state_shared.animation_timer -= ENERMY_ANIM_TIME_FLAP * 4f32; 
+        }
+
+
+        if state_data.shoot_timer > ENERMY_SHOOT_TIME {
+            let shot_count = rand::gen_range(1, ENERMY_MAX_BURST_COUNT); 
+            
+        }
 
         None
     }
@@ -385,11 +415,56 @@ impl Enermy {
     fn update_state_shooting(
         state_shared: &mut EnermyStateShared,
         dt: f32,
-        // bullets: &mut Vec<Bullet>,
+        bullets: &mut Vec<Bullet>,
         resources: &Resources,
         state_data: &mut EnermyStateShooting,
         sound_mixer: &mut SoundMixer,
     ) -> Option<EnermyCommand> {
+
+        state_shared.pos.x += rand::gen_range(-1f32, 1f32) * ENERMY_SPEED * 0.5f32 * dt;
+        state_shared.pos.y += rand::gen_range(-1f32, 1f32) * ENERMY_SPEED * 0.5f32 * dt;
+        Self::clamp_in_view(&mut state_shared.pos); 
+
+        state_data.shoot_timer -= dt;
+
+        if state_data.shoot_timer <= 0f32 {
+            state_data.shoot_timer = ENERMY_SHOOT_BURST_TIME; 
+            state_data.shots_left -= 1;
+
+            let should_spawn_2 = rand::gen_range(0, 2) > 0;
+            if should_spawn_2 {
+                let spawn_offset = vec2((state_shared.texture.width() / 4f32) * 0.5f32, 0f32); 
+
+                bullets.push(Bullet::new(
+                    state_shared.pos - spawn_offset, 
+                    BulletHurtType::Player, 
+                    resources
+                ))
+            }else {
+                let spawn_offset = vec2(0f32, -3f32);
+                bullets.push(
+                    Bullet::new(state_shared.pos + spawn_offset, BulletHurtType::Player, resources)
+                )
+            }
+
+            resources.play_sound(SoundIdentifier::EnermyShoot, sound_mixer, Volume(1.0f32)); 
+            state_shared.pos.y -= 2f32;
+        }
+
+
+        state_shared.collision_rect.x = state_shared.pos.x - state_shared.texture.width() * 0.5f32;
+        state_shared.collision_rect.y = state_shared.pos.y; 
+
+        state_shared.animation_timer += dt;
+        if state_shared.animation_timer > ENERMY_ANIM_TIME_FLAP * 4f32 {
+            state_shared.animation_timer -= ENERMY_ANIM_TIME_FLAP * 4f32; 
+        }
+
+        if state_data.shots_left <= 0 { //dont shootin the player
+            return Some(EnermyCommand::ChangeState(EnermyState::Normal(
+                EnermyStateNormal { shoot_timer: 0f32 }
+            )))
+        }
         None
     }
 

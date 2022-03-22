@@ -19,7 +19,7 @@ use crate::{
 
 
 
-pub struct MeuPayload {
+pub struct MenuPayload {
     score: i32,
 }
 
@@ -30,11 +30,11 @@ pub struct GameStateMenu {
 }
 
 pub enum ChangeStatePayload {
-    MeuPayload(MeuPayload),
+    MenuPayload(MenuPayload),
 }
 
 pub enum GameStateCommand {
-    ChangeState(GameStateIdentifier, Option<ChangeStatePayload>)
+    ChangeState(GameStateIdentifier, Option<ChangeStatePayload>),
 }
 
 
@@ -113,7 +113,7 @@ impl GameState for GameStateMenu {
     fn on_enter(&mut self, resources: &Resources, payload_optional: Option<ChangeStatePayload>){
         if let Some(payload) = payload_optional {
             match payload {
-                ChangeStatePayload::MeuPayload(menu_payload) => {
+                ChangeStatePayload::MenuPayload(menu_payload) => {
                     self.last_score_optional = Some(menu_payload.score)
                 }
             }
@@ -280,10 +280,13 @@ impl GameState for GameStateGame {
                 }
             }
         }
+
+        
         
         for enermy in self.enermies.iter_mut() {  
             enermy.update(
                 dt, 
+                &mut self.bullet,
                 resources, 
                 &self.player.pos,
                 &mut self.wave_manager, 
@@ -297,7 +300,33 @@ impl GameState for GameStateGame {
             bullet.draw(); 
         }
 
+         // bullets hurting player
 
+         for bullet in self.bullet.iter_mut().filter(|b| b.hurt_type == BulletHurtType::Player) {
+             if bullet.overlaps(&self.player.collision_rect){
+                 if self.player.state != PlayerState::Normal {
+                     continue; 
+                 }
+
+                 self.player_lives -= 1; 
+                 resources.play_sound(SoundIdentifier::PlayerOuch, sound_mixer, Volume(1.0f32)); 
+                 //change player_state
+                 self.player.process_optional_command(Some(PlayerCommand::ChangeState(
+                     PlayerState::Invincible(PLAYER_TIME_INVISBLE)
+                 )));
+                 if self.player_lives <= 0 {
+                    return Some(GameStateCommand::ChangeState(
+                        GameStateIdentifier::Menu,
+                        Some(ChangeStatePayload::MenuPayload(MenuPayload {
+                            score: self.player_score,
+                        })),
+                    ));
+                }
+             }
+         }
+
+
+        // homing enemies hurting player
         for enermy in self.enermies.iter_mut().filter(|e| variant_eq(&e.state, &EnermyState::Homing(EnermyStateHoming {}))) {
             if enermy.overlaps(&self.player.collision_rect) {
                 let player_invincible = variant_eq(&self.player.state, &PlayerState::Invincible(0f32)); 
@@ -311,7 +340,37 @@ impl GameState for GameStateGame {
             }
         }
 
-        let death_methods = Vec::<(Vec2, EnermyDeathMethod, EnermyType, EnermyColor )>::with_capacity(4); 
+        let mut death_methods =
+            Vec::<(Vec2, EnermyDeathMethod, EnermyType, EnermyColor)>::with_capacity(4);
+
+
+            // bullets hurting enemies
+        for bullet in self.bullet.iter_mut().filter(|b| b.hurt_type == BulletHurtType::Enermy) {
+            for enermy in self.enermies.iter_mut() {
+                if enermy.overlaps(&bullet.collision_rect) && !bullet.is_kill {
+                    enermy.state_shared.health -= 1;
+                    self.wave_manager.last_enermydeath_reason = LastEnermyDeathReason::Player; 
+
+                    if enermy.state_shared.health <= 0 {
+                        resources.play_sound(
+                            SoundIdentifier::EnermyOuch, 
+                            sound_mixer, 
+                            Volume(1.0f32)
+                        ); 
+
+                        death_methods.push((
+                            enermy.state_shared.pos, 
+                            enermy.state_shared.death_method, 
+                            enermy.state_shared.enermy_type, 
+                            enermy.state_shared.enermy_color
+                        )); 
+                    }
+
+                    bullet.is_kill = true; // can only hurt one enemy, flag for deletion
+                }
+            }
+        }
+
 
         for (pos, death_method, enermy_type, enermy_color) in death_methods.iter() {
             let score_add = match enermy_type {
@@ -340,6 +399,10 @@ impl GameState for GameStateGame {
             }
         }
 
+
+        self.bullet.retain(|e| !e.is_kill); 
+        self.enermies.retain(|e| e.state_shared.health > 0); 
+
         draw_texture_ex(
             resources.ground_bg,
             0f32,
@@ -367,12 +430,13 @@ impl GameState for GameStateGame {
     }
 
     fn on_enter(&mut self, resources: &Resources, payload_optional: Option<ChangeStatePayload>) {
+        self.wave_manager.reset(); 
         self.player.reset(resources); 
         self.player_score = 0; 
         self.player_lives = PLAYER_LIVES_START; 
         self.enermies.clear(); 
+        self.bullet.clear(); 
 
-        
     }
 }
 
