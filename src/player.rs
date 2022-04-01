@@ -3,7 +3,8 @@ use quad_snd::mixer::{SoundMixer, Volume};
 
 use crate:: {
     constants::*, 
-    resources::{Resources, SoundIdentifier}
+    resources::{Resources, SoundIdentifier},
+    bullet:: { Bullet, BulletHurtType }
 };
 
 
@@ -48,9 +49,11 @@ impl Player {
         }
     }
 
-    pub fn update(&mut self, dt: f32, resources: &Resources, sound_mixer: &mut SoundMixer) {
+    pub fn update(&mut self, dt: f32, bullets: &mut Vec<Bullet>, resources: &Resources, sound_mixer: &mut SoundMixer) {
+        self.shoot_timer += dt; 
+
         if is_key_down(KEY_LEFT) {
-            self.pos.x += PLAYER_SPEED * dt;
+            self.pos.x -= PLAYER_SPEED * dt;
             if self.pos.x > 0f32 {
                 self.pos.x  = 0f32; 
             }
@@ -69,18 +72,15 @@ impl Player {
                 if is_key_down(KEY_SHOOT) && self.shoot_timer >= PLAYER_SHOOT_TIME {
                     let spawn_offset = vec2(3f32, -4f32); 
                     //bullet here
-                    resources.play_sound(
-                        SoundIdentifier::PlayerShoot, 
-                        sound_mixer, 
-                        Volume(1.0f32)
-                    ); 
-
+                    bullets.push(Bullet::new(self.pos + spawn_offset, BulletHurtType::Enermy, resources)); 
+                    resources.play_sound(SoundIdentifier::PlayerShoot, sound_mixer, Volume(1.0f32)); 
                     self.shoot_timer = 0f32; 
                 }
 
                 None
                 
             }
+            
             //lininterp = "0.1.3"
 
             PlayerState::Invincible(time_left) => {

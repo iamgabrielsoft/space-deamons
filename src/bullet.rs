@@ -40,7 +40,8 @@ impl Bullet {
             hurt_type, 
             anim_timer: 0f32, 
             collision_rect: Rect::new(pos.x, pos.y, 2.0f32, 6f32), 
-            is_kill: false
+            is_kill: false,
+            
         }
     }
 

@@ -134,40 +134,39 @@ impl GameState for GameStateMenu {
         let font_size = (aspect_diff * 10f32) as u16;
 
         if let Some(last_score) = self.last_score_optional {
-            let score_text = format!("{}", last_score); 
+            let score_text = format!("{}", last_score);
             let mut text_x = width_padding + scaled_game_size_w * 0.5f32;
             text_x -= score_text.len() as f32 * 0.5f32 * font_size as f32 * 0.6f32;
-
             draw_text_ex(
-                score_text.as_ref(), 
-                text_x, 
-                height_padding + font_size as f32 * 2f32, 
+                score_text.as_ref(),
+                text_x,
+                height_padding + font_size as f32 * 2f32,
                 TextParams {
                     font: resources.font,
                     font_size,
                     font_scale: 1f32,
                     color: YELLOW,
-                    font_scale_aspect: 1f32
-                }
-            )
-        } 
-        
-        let mut text_x = width_padding + scaled_game_size_w * 0.5f32; 
+                    font_scale_aspect: 1f32,
+                },
+            );
+        }
         let start_text = "TAP SPACE TO START";
-        text_x -= start_text.len() as f32 * 0.5f32 * font_size as f32 * 0.6f32; 
+        let mut text_x = width_padding + scaled_game_size_w * 0.5f32;
+        text_x -= start_text.len() as f32 * 0.5f32 * font_size as f32 * 0.6f32;
 
         draw_text_ex(
-            start_text, 
-            text_x, 
-            screen_height() * 0.5f32, 
+            start_text,
+            text_x,
+            screen_height() * 0.5f32,
             TextParams {
-                font: resources.font, 
-                font_size, 
-                font_scale: 1f32, 
-                color: YELLOW, 
-                font_scale_aspect: 1f32
-            }
-        )
+                font: resources.font,
+                font_size,
+                font_scale: 1f32,
+                color: YELLOW,
+                font_scale_aspect: 1f32,
+            },
+        );
+    
     }
     
 }
@@ -265,168 +264,165 @@ impl GameState for GameStateGame {
     }
 
     fn update(&mut self, dt: f32, resources: &Resources, sound_mixer: &mut SoundMixer) -> Option<GameStateCommand>{
-        let manager_message_optional = self.wave_manager.update(dt, &mut self.enermies, resources, sound_mixer);
-        if let Some(manager_message) = manager_message_optional {
-            match manager_message {
-                WaveManagerMessage::LevelCleared => {
-                    self.player_lives += 1; 
-                    let score_add = match self.wave_manager.last_enermydeath_reason {
-                        LastEnermyDeathReason::Environment => SCORE_SURVIVED_ALL, 
-                        LastEnermyDeathReason::Player =>  SCORE_KILL_ALL
-                    };    
-
-                    resources.play_sound(SoundIdentifier::WaveCleared, sound_mixer, Volume(0.6f32)); 
-                    self.player_score += score_add; 
-                }
+        let manager_message_optional =
+        self.wave_manager
+            .update(dt, &mut self.enermies, resources, sound_mixer);
+    if let Some(manager_message) = manager_message_optional {
+        match manager_message {
+            WaveManagerMessage::LevelCleared => {
+                self.player_lives += 1;
+                self.player_lives = self.player_lives.min(PLAYER_LIVES_MAX);
+                let score_add = match self.wave_manager.last_enermydeath_reason {
+                    LastEnermyDeathReason::Environment => SCORE_SURVIVED_ALL,
+                    LastEnermyDeathReason::Player => SCORE_KILL_ALL,
+                };
+                resources.play_sound(SoundIdentifier::WaveCleared, sound_mixer, Volume(0.6f32));
+                self.player_score += score_add;
             }
         }
+    }
 
-        
-        
-        for enermy in self.enermies.iter_mut() {  
-            enermy.update(
-                dt, 
-                &mut self.bullet,
-                resources, 
-                &self.player.pos,
-                &mut self.wave_manager, 
-                sound_mixer
-            );
-            enermy.draw(); 
+    for enemy in self.enermies.iter_mut() {
+        enemy.update(
+            dt,
+            &mut self.bullet,
+            resources,
+            &self.player.pos,
+            &mut self.wave_manager,
+            sound_mixer,
+        );
+        enemy.draw();
+    }
+
+    for bullet in self.bullet.iter_mut() {
+        bullet.update(dt);
+        bullet.draw();
+    }
+
+    // bullets hurting player
+    for bullet in self.bullet.iter_mut().filter(|b| b.hurt_type == BulletHurtType::Player){
+        if bullet.overlaps(&self.player.collision_rect) {
+            if self.player.state != PlayerState::Normal {
+                continue;
+            }
+            self.player_lives -= 1;
+            resources.play_sound(SoundIdentifier::PlayerOuch, sound_mixer, Volume(1.0f32));
+            // CHANGE PLAYER STATE
+            self.player.process_optional_command(Some(PlayerCommand::ChangeState(PlayerState::Invincible(PLAYER_TIME_INVISBLE),)));
+            if self.player_lives <= 0 {
+                return Some(GameStateCommand::ChangeState(
+                    GameStateIdentifier::Menu,
+                    Some(ChangeStatePayload::MenuPayload(MenuPayload {
+                        score: self.player_score,
+                    })),
+                ));
+            }
+            bullet.is_kill = true;
+            break;
         }
+    }
 
-        for bullet in self.bullet.iter_mut(){
-            bullet.update(dt); 
-            bullet.draw(); 
+    // homing enemies hurting player
+    for enemy in self.enermies.iter_mut().filter(|e| variant_eq(&e.state, &EnermyState::Homing(EnermyStateHoming {})))
+        // filter enemies containing homing state, variant_eq is used so we can disregard homing data
+        
+    {
+        if enemy.overlaps(&self.player.collision_rect) {
+            let player_invisible =
+                variant_eq(&self.player.state, &PlayerState::Invincible(0f32));
+            if !player_invisible {
+                self.player_lives -= 1;
+                resources.play_sound(SoundIdentifier::PlayerOuch, sound_mixer, Volume(1.0f32));
+                self.player
+                    .process_optional_command(Some(PlayerCommand::ChangeState(
+                        PlayerState::Invincible(PLAYER_TIME_INVISBLE),
+                    )));
+                enemy.state_shared.health = 0;
+            }
         }
+    }
 
-         // bullets hurting player
+    // todo explain
+    let mut death_methods = Vec::<(Vec2, EnermyDeathMethod, EnermyType, EnermyColor)>::with_capacity(4);
 
-         for bullet in self.bullet.iter_mut().filter(|b| b.hurt_type == BulletHurtType::Player) {
-             if bullet.overlaps(&self.player.collision_rect){
-                 if self.player.state != PlayerState::Normal {
-                     continue; 
-                 }
-
-                 self.player_lives -= 1; 
-                 resources.play_sound(SoundIdentifier::PlayerOuch, sound_mixer, Volume(1.0f32)); 
-                 //change player_state
-                 self.player.process_optional_command(Some(PlayerCommand::ChangeState(
-                     PlayerState::Invincible(PLAYER_TIME_INVISBLE)
-                 )));
-                 if self.player_lives <= 0 {
-                    return Some(GameStateCommand::ChangeState(
-                        GameStateIdentifier::Menu,
-                        Some(ChangeStatePayload::MenuPayload(MenuPayload {
-                            score: self.player_score,
-                        })),
+    // bullets hurting enemies
+    for bullet in self.bullet.iter_mut().filter(|b| b.hurt_type == BulletHurtType::Enermy){
+        for enemy in self.enermies.iter_mut() {
+            if enemy.overlaps(&bullet.collision_rect) && !bullet.is_kill {
+                enemy.state_shared.health -= 1;
+                self.wave_manager.last_enermydeath_reason = LastEnermyDeathReason::Player;
+                // death
+                if enemy.state_shared.health <= 0 {
+                    resources.play_sound(
+                        SoundIdentifier::EnermyOuch,
+                        sound_mixer,
+                        Volume(1.0f32),
+                    );
+                    death_methods.push((
+                        enemy.state_shared.pos,
+                        enemy.state_shared.death_method,
+                        enemy.state_shared.enermy_type,
+                        enemy.state_shared.enermy_color,
                     ));
                 }
-             }
-         }
-
-
-        // homing enemies hurting player
-        for enermy in self.enermies.iter_mut().filter(|e| variant_eq(&e.state, &EnermyState::Homing(EnermyStateHoming {}))) {
-            if enermy.overlaps(&self.player.collision_rect) {
-                let player_invincible = variant_eq(&self.player.state, &PlayerState::Invincible(0f32)); 
-                if !player_invincible {
-                    self.player_lives -= 1; 
-                    resources.play_sound(SoundIdentifier::PlayerOuch, sound_mixer, Volume(1.0f32)); 
-                    self.player.process_optional_command(Some(PlayerCommand::ChangeState(PlayerState::Invincible(PLAYER_TIME_INVISBLE)))); 
-                }
-
-                enermy.state_shared.health = 0; 
+                // can only hurt one enemy, flag for deletion
+                bullet.is_kill = true;
             }
         }
+    }
 
-        let mut death_methods =
-            Vec::<(Vec2, EnermyDeathMethod, EnermyType, EnermyColor)>::with_capacity(4);
-
-
-            // bullets hurting enemies
-        for bullet in self.bullet.iter_mut().filter(|b| b.hurt_type == BulletHurtType::Enermy) {
-            for enermy in self.enermies.iter_mut() {
-                if enermy.overlaps(&bullet.collision_rect) && !bullet.is_kill {
-                    enermy.state_shared.health -= 1;
-                    self.wave_manager.last_enermydeath_reason = LastEnermyDeathReason::Player; 
-
-                    if enermy.state_shared.health <= 0 {
-                        resources.play_sound(
-                            SoundIdentifier::EnermyOuch, 
-                            sound_mixer, 
-                            Volume(1.0f32)
-                        ); 
-
-                        death_methods.push((
-                            enermy.state_shared.pos, 
-                            enermy.state_shared.death_method, 
-                            enermy.state_shared.enermy_type, 
-                            enermy.state_shared.enermy_color
-                        )); 
-                    }
-
-                    bullet.is_kill = true; // can only hurt one enemy, flag for deletion
+    for (pos, death_method, enemy_type, enemy_color) in death_methods.iter() {
+        let score_add = match enemy_type {
+            EnermyType::NORMAL => SCORE_NORMAL,
+            EnermyType::MINI => SCORE_MINI,
+        };
+        self.player_score += score_add;
+        match death_method {
+            EnermyDeathMethod::None => {}
+            EnermyDeathMethod::SpawnChildren(amount) => {
+                resources.play_sound(SoundIdentifier::SpawnMini, sound_mixer, Volume(1.0f32));
+                let spawn_width = 20f32;
+                let step = 1. / (*amount as f32);
+                for i in 0..*amount {
+                    let spawn_pos = *pos + vec2(step * spawn_width * i as f32, 0f32);
+                    spawn_enermy(
+                        &mut self.enermies,
+                        resources,
+                        SpawnBlueprint::Mini(spawn_pos),
+                        *enemy_color,
+                    );
                 }
             }
         }
+    }
 
+    
+    self.bullet.retain(|e| !e.is_kill);// remove bullets that hit something
+    self.enermies.retain(|e| e.state_shared.health > 0); // remove dead enemies
 
-        for (pos, death_method, enermy_type, enermy_color) in death_methods.iter() {
-            let score_add = match enermy_type {
-                EnermyType::NORMAL => SCORE_NORMAL, 
-                EnermyType::MINI => SCORE_MINI
-            }; 
-
-            self.player_score += score_add; 
-            match death_method {
-                EnermyDeathMethod::None => {}, 
-                EnermyDeathMethod::SpawnChildren(amount) => {
-                    resources.play_sound(SoundIdentifier::SpawnMini, sound_mixer, Volume(1.0f32));
-                    let spawn_width = 20f32;
-                    let step = 1. / (*amount as f32);  
-                    for i in 0..*amount {
-                        let spawn_pos = *pos + vec2(step + spawn_width * i as f32, 0f32); 
-                        spawn_enermy(
-                            &mut self.enermies, 
-                            resources,
-                            SpawnBlueprint::Mini(spawn_pos), 
-                            *enermy_color
-                        )
-                    }
-  
-                }
-            }
-        }
-
-
-        self.bullet.retain(|e| !e.is_kill); 
-        self.enermies.retain(|e| e.state_shared.health > 0); 
-
-        draw_texture_ex(
-            resources.ground_bg,
-            0f32,
-            GAME_SIZE_Y as f32 - resources.ground_bg.height(),
-            WHITE,
-            DrawTextureParams {
-                //dest_size: Some(vec2(screen_width(), screen_height())),
-                dest_size: Some(Vec2::new(GAME_SIZE_X as f32, resources.ground_bg.height())),
-                ..Default::default()
-            },
-        );
-
+    draw_texture_ex(
+        resources.ground_bg,
+        0f32,
+        GAME_SIZE_Y as f32 - resources.ground_bg.height(),
+        WHITE,
+        DrawTextureParams {
+            //dest_size: Some(vec2(screen_width(), screen_height())),
+            dest_size: Some(Vec2::new(GAME_SIZE_X as f32, resources.ground_bg.height())),
+            ..Default::default()
+        },
+    );
 
         draw_lives(
-            &self.player_lives, 
+            &self.player_lives,
             resources.life,
-            &resources.ground_bg, 
-            &self.wave_manager
-        ); 
+            &resources.ground_bg,
+            &self.wave_manager,
+        );
 
-        
-        self.player.update(dt, resources, sound_mixer); //enter the bullet
-        self.player.draw(); 
+        self.player.update(dt, &mut self.bullet, resources, sound_mixer);
+        self.player.draw();
         None
+           
     }
 
     fn on_enter(&mut self, resources: &Resources, payload_optional: Option<ChangeStatePayload>) {
@@ -436,7 +432,6 @@ impl GameState for GameStateGame {
         self.player_lives = PLAYER_LIVES_START; 
         self.enermies.clear(); 
         self.bullet.clear(); 
-
     }
 }
 

@@ -51,6 +51,7 @@ async fn main() {
             Box::new(GameStateGame::new(&resources)),
         ),
     ];
+    
     let mut game_manager = GameManager::new(game_states, resources, mixer);
 
     loop {

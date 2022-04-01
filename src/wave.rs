@@ -5,7 +5,8 @@ use quad_snd::mixer::{ SoundMixer, Volume};
 use crate::{
     constants::*, 
     enermy::{ EnermyColor, EnermyType, Enermy, EnermyDeathMethod},
-    resources::{ Resources, SoundIdentifier }
+    resources::{ Resources, SoundIdentifier }, 
+    variant_eq
 }; 
 
 
@@ -52,6 +53,7 @@ pub struct WaveManager {
 impl WaveManager {
     pub fn new () -> Self {
         let enermies_left = ENERMY_SPAWN_STARTING_COUNT; 
+        print!("{}", enermies_left); 
         
         WaveManager {
             state: WaveManagerState::Spawning(WaveManagerStateSpawning {
@@ -80,6 +82,7 @@ impl WaveManager {
             spawn_timer: 0f32, 
             enermies_left
         }); 
+
         self.last_enermydeath_reason = LastEnermyDeathReason::Environment; 
         self.internal_timer = 0f32; 
     }
@@ -109,15 +112,16 @@ impl WaveManager {
                 WaveManagerCommand::ChangeState(target_state) => {
                     self.state = target_state;
 
-                    // let cleared_screen = variant_eq {
-                    //     &self.state
+                    let cleared_screen = variant_eq(&self.state,
+                        &WaveManagerState::Spawning(WaveManagerStateSpawning {
+                            spawn_timer: 0f32, 
+                            enermies_left: 0
+                        }),
+                    ); 
 
-                    // }; 
-
-
-                    // if cleared_screen {
-                    //     return Some(WaveManagerMessage::LevelCleared); 
-                    // }
+                    if cleared_screen {
+                        return Some(WaveManagerMessage::LevelCleared)
+                    }
                 }
             }
         }
@@ -157,7 +161,6 @@ impl WaveManager {
     ) -> Option<WaveManagerCommand> {
         if enermies.is_empty() {
             let enermies_left = Self::get_enermy_spawn_count(internal_timer); 
-
             return Some(WaveManagerCommand::ChangeState(WaveManagerState::Spawning(
                 WaveManagerStateSpawning {
                     enermies_left, 
